@@ -1,0 +1,4 @@
+flask-rest-jsonapi
+flask-sqlalchemy
+pyodbc
+pandas
