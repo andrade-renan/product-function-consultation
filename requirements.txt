@@ -1,2 +1,3 @@
 flask-rest-jsonapi
 pandas
+openpyxl

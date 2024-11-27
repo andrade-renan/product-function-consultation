@@ -20,23 +20,42 @@ class doGet_productInfo:
         self.cache = self.load_cache()
 
         self.populate_cache()
+        # self.att_descriptionPerComposition()
 
     def load_cache(self):
-        if os.path.exists('.\product_info\product_cache.json'):
-            with open('.\product_info\product_cache.json', 'r') as f:
+        if os.path.exists('.\\product_info\\product_cache.json'):
+            with open('.\\product_info\\product_cache.json', 'r', encoding='utf-8') as f:  # Especifique utf-8 aqui
                 try:
-                    return json.load(f)
-                except:
+                    return {str(k): v for k, v in json.load(f).items()}  # Garantir que as chaves sejam strings
+                except json.JSONDecodeError:
+                    print("Erro ao decodificar JSON. Inicializando cache vazio.")
                     return {}
         else:
             return {}
+
     
     def save_cache(self):
-        """Salva o cache atual no arquivo JSON."""
-        with open('.\product_info\product_cache.json', 'w') as f:
-            json.dump(self.cache, f)
-        
-        self.load_cache()
+        """Salva o cache atual no arquivo JSON, garantindo a correta codificação."""
+        try:
+            # Abre o arquivo com a codificação UTF-8 explícita para leitura
+            with open('.\product_info\product_cache.json', 'r', encoding='utf-8') as f:
+                existing_cache = json.load(f)
+        except FileNotFoundError:
+            existing_cache = {}
+        except json.JSONDecodeError:
+            print("Erro ao decodificar o arquivo JSON. Verifique se o conteúdo é válido.")
+            existing_cache = {}
+        except UnicodeDecodeError:
+            print("Erro de decodificação Unicode. O arquivo pode não estar em UTF-8.")
+            existing_cache = {}
+
+        # Atualiza o cache existente com as novas informações do cache na memória
+        existing_cache.update(self.cache)
+
+        # Abre o arquivo para escrita com a codificação UTF-8
+        with open('.\product_info\product_cache.json', 'w', encoding='utf-8') as f:
+            json.dump(existing_cache, f, indent=4, ensure_ascii=False)
+
     
     def find_closest_inci_name(self, component, inci_names):
         """ Encontra o nome INCI mais próximo baseado na regex. """
@@ -93,6 +112,11 @@ class doGet_productInfo:
                             if not matched_row.empty:
                                 function_list = [func.strip() for func in matched_row.iloc[0]['Function PT'].split(',')]
                                 product_infos['functionsPerComposition'][composition] = [func.lower() for func in function_list]
+                                if 'descriptionPerComposition' in product_infos:
+                                    product_infos['descriptionPerComposition'][composition] = matched_row.iloc[0]['Chem/IUPAC Name / Description']
+                                else:
+                                    # Se a chave não existir, inicialize-a com um dicionário vazio ou com o valor adequado
+                                    product_infos['descriptionPerComposition'] = {composition: matched_row.iloc[0]['Chem/IUPAC Name / Description']}
                                 for function in function_list:
                                     function_lower = function.lower()
                                     if function_lower not in product_infos['functionOccurrences']:
@@ -108,10 +132,10 @@ class doGet_productInfo:
                     # Trate o caso onde 'Composição' é NaN
                     product_infos['ref'] = row['REF']
                     product_infos['brand'] = row['Marca']
-                    product_infos['name'] = row['Nome do Produto']
+                    product_infos['name'] = row['Nome do Produto'] 
                     product_infos['ean'] = ean
                     product_infos['composition'] = []
-
+        
         return product_infos
     
     def calculate_function_score(self, product_infos):
@@ -136,20 +160,61 @@ class doGet_productInfo:
             # Cálculo do score
             score = (peso_frequencia * normalized_occurrence) + (peso_posicao * normalized_position)
             function_scores[function] = float(f"{score:.2f}")
-
+        
+        
         return function_scores
     
     def populate_cache(self):
+        cache_updated = False
         for ean in self.db_products['Código de Barras'].unique():
-
-            if str(ean) not in self.cache:
-                product_info = self.get_product_function(ean)
+            ean_str = str(ean)  # Garantir que o EAN é uma string
+            if ean_str not in self.cache:
+                print(f'Adicionando {ean_str} ao cache.')
+                product_info = self.get_product_function(ean_str)
                 product_info['functionScores'] = self.calculate_function_score(product_info)
-                self.cache[ean] = product_info
-                self.save_cache()
+                self.cache[ean_str] = product_info
+                cache_updated = True
+            else:
+                print(f'{ean_str} já está no cache.')
+
+        if cache_updated:
+            self.save_cache()
+
+
+    def att_descriptionPerComposition(self):
+        for ean, product_info in self.cache.items():
+            # Verifica se 'descriptionPerComposition' já está no cache, caso contrário, inicializa
+            if 'descriptionPerComposition' not in product_info:
+                product_info['descriptionPerComposition'] = {}
+
+            for composition in product_info.get('composition', []):
+                # Converte a composição para minúsculas
+                composition_lower = composition.lower()
+                
+                # Busca correspondência em `db_cosing` com índice em minúsculas
+                match = self.db_cosing[self.db_cosing['INCI name'].str.lower() == composition_lower]
+
+                if not match.empty:
+                    # Atribui o valor da coluna 'Chem/IUPAC Name / Description' da primeira correspondência
+                    description = match['Chem/IUPAC Name / Description'].iloc[0]
+                    product_info['descriptionPerComposition'][composition] = description
+                else:
+                    # Define uma descrição padrão caso não encontre correspondência
+                    product_info['descriptionPerComposition'][composition] = "Descrição não encontrada"
+
+            # Atualiza o cache com a nova descrição
+            self.cache[ean] = product_info
         
+            # Salva o cache atualizado
+            self.save_cache()
+
+
+
+        
+
     def process_product_info(self,ean):
         """ Processa e retorna as informações do produto em JSON"""
+
         if not ean:
             return jsonify({'error': 'EAN code is required'}), 400
         
@@ -167,6 +232,8 @@ class doGet_productInfo:
         self.save_cache()
 
         json_response = json.dumps(product_info, ensure_ascii=False)
+
+        
 
         return Response(json_response, content_type='application/json; charset=utf-8')
     

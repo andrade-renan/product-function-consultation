@@ -1,6 +1,7 @@
 from product_info.product_info import doGet_productInfo
 from group_ingredients.group_ingredients import doGet_groupIngredients
-from flask import Flask, request
+from flask import Flask, request, send_file
+import io
 
 
 # Criar a aplicação em Flask
@@ -18,14 +19,14 @@ def get_product_info():
 def group_products_ingredients():
     barcodes_str = request.args.get('eans', default=None)
     barcode_list = barcodes_str.split(',')
-    getPath_groupIngredients.comparison_spreadsheet(barcode_list)
-    return barcode_list
-
-"""
-Essa chamada agrupa os produtos em Ingrediente, Produto 1, Produto 2, etc. em colunas onde:
-Ingrediente: Nome do Ingrediente
-Produtos: Funções daquele ingredientes relativa ao produto
-"""
+    buffer = getPath_groupIngredients.comparison_spreadsheet(barcode_list)
+    
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="comparison_spreadsheet.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 if __name__ == '__main__':
     app.run(debug=True)
