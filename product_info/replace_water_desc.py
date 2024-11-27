@@ -14,7 +14,7 @@ for product_key, product_info in data.items():
         product_info['descriptionPerComposition']['Water'] = novo_valor
 
 # Salvar as alterações de volta para o arquivo JSON
-with open(caminho_arquivo, 'w') as file:
+with open(caminho_arquivo, 'w', encoding='utf-8') as file:
     json.dump(data, file, ensure_ascii=False, indent=4)
 
 print('Substituição completa.')
