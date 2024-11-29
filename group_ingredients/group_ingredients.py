@@ -48,7 +48,8 @@ class doGet_groupIngredients:
         for ingredient, info in ingredients_dict.items():
             row = {
                 'Ingrediente': ingredient,
-                'Descrição': ', '.join(info['Descrição']),
+                'Descrição': ', '.join(str(desc) for desc in info['Descrição'])
+
             }
             for product_name in product_compositions.keys():
                 row[product_name] = info.get(product_name, '-')

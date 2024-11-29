@@ -57,17 +57,39 @@ class doGet_productInfo:
             json.dump(existing_cache, f, indent=4, ensure_ascii=False)
 
     
+    def simplify_text(self,text):
+        # Converter o texto para minúsculas
+        text = text.lower()
+        # Substituir variações comuns
+        substitutions = {
+        'lauryl': 'lauroyl',  # Considerar 'lauryl' e 'lauroyl' como equivalentes
+        'sulphate': 'sulfate', # Britânico x Americano
+        'fibre': 'fiber',      # Britânico x Americano
+        'colour': 'color'      # Britânico x Americano
+        }
+        for old, new in substitutions.items():
+            text = re.sub(old, new, text)
+        
+        text = re.sub(r'[^\w\s]', '', text.lower())
+
+        return text
+
     def find_closest_inci_name(self, component, inci_names):
-        """ Encontra o nome INCI mais próximo baseado na regex. """
-        # Escapa caracteres especiais em componentes para uso em regex
-        pattern = re.escape(component.strip().lower())
+        # Simplificar e dividir o componente em palavras
+        component_words = set(self.simplify_text(component).split())
+        
         best_match = None
-        best_score = 0
+        best_score = -1
 
         for inci_name in inci_names:
-            # Verifica quantas palavras em `component` aparecem em `inci_name`
-            matches = re.findall(pattern, inci_name.lower())
-            score = len(matches)
+            # Simplificar e dividir o nome INCI em palavras
+            inci_words = set(self.simplify_text(inci_name).split())
+
+            # Usar interseção de conjuntos para encontrar correspondências de palavras
+            common_words = component_words.intersection(inci_words)
+            score = len(common_words)
+
+            # Atualiza se a pontuação é maior ou se é a primeira correspondência encontrada
             if score > best_score:
                 best_score = score
                 best_match = inci_name
